@@ -1,3 +1,3 @@
 selenium
 requests
-chromedriver_py
+webdriver-manager

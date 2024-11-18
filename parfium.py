@@ -3,12 +3,12 @@ import time
 import logging
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException, StaleElementReferenceException
-from chromedriver_py import binary_path
+from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
+from webdriver_manager.chrome import ChromeDriverManager
 
 # TODO: make the script multi-threaded
 # TODO: fix getting the size elements
@@ -20,11 +20,14 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 webhook_url = "https://discord.com/api/webhooks/1284168278335291474/-i1m-VGJk-sFcljJzD7ICGbVrP7sQin3k0A8qo4OZksHEs9_XlMqkIxLHUQSt9oBfK9F"
 
 # Initialize the WebDriver service
-service = Service(executable_path=binary_path)
+service = ChromeService(ChromeDriverManager().install())
 
 def fetch_urls(endpoint):
     try:
         response = requests.get(endpoint)
+        while response.status_code != 200:
+            response = requests.get(endpoint)
+            logging.info("Retrying to fetch data")
         response.raise_for_status()
         perfumes = response.json()
 
@@ -43,7 +46,7 @@ def create_driver(headless):
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--enable-unsafe-swiftshader")
 
     return webdriver.Chrome(service=service, options=chrome_options)
 
@@ -100,6 +103,7 @@ def check_price_pbg(driver, urls):
 
             except TimeoutException:
                 logging.error("Timeout waiting for price elements to load")
+                send_discord_message(f"No price found for {item['title']}")
             except NoSuchElementException:
                 logging.error("Price elements not found on the page")
             except Exception as e:
@@ -114,96 +118,15 @@ def check_price_pbg(driver, urls):
         
     return True
 
-def check_price_pfd(driver, urls):
-    for item in urls:
-        try:
-            logging.info(f"Navigating to {item["title"]}")
-            driver.get(item["link"])
-            logging.info("Page loaded successfully")
-
-            # Wait for the page to load completely
-            WebDriverWait(driver, 20).until(
-                EC.presence_of_element_located((By.TAG_NAME, "body"))
-            )
-
-            # Scroll down the page
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(2)  # Wait for any lazy-loaded elements
-
-            try:
-                # Wait for the cookie button to be present
-                try:
-                    cookie_button = WebDriverWait(driver, 10).until(
-                        EC.element_to_be_clickable((By.ID, "CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll"))
-                    )
-                    if cookie_button:
-                        logging.info("Cookie button found and clicked")
-                        cookie_button.click()
-                    
-                    time.sleep(2)  # Wait for any lazy-loaded elements
-
-                    # Wait for the price elements to be present and visible
-                    price_elements = WebDriverWait(driver, 20).until(
-                        EC.visibility_of_all_elements_located((By.CSS_SELECTOR, ".price-new-js"))  # Corrected selector
-                    )
-                    if price_elements:
-                        logging.info(f"Found {len(price_elements)} price elements")
-
-                        # Get the price for the biggest available size
-                        price_to_pay = price_elements[-1].text
-                        if price_to_pay:
-                            logging.info(f"Price found: {price_to_pay}")
-                            send_discord_message(f"Price of {item['title']}: {price_to_pay}")
-                        else:
-                            send_discord_message(f"No price found for {item['title']}")
-                    else:
-                        logging.error("No price elements found")
-
-                except TimeoutException:
-                    logging.error("Timeout while waiting for the price elements")
-                except NoSuchElementException:
-                    logging.error("Price elements not found on the page")
-                except Exception as e:
-                    logging.error(f"Error while processing price elements: {str(e)}")
-
-            except WebDriverException as e:
-                logging.error(f"WebDriver error: {str(e)}")
-                return False
-            except Exception as e:
-                logging.error(f"Error during page load or processing: {str(e)}")
-                return False
-            
-            return True
-        except WebDriverException as e:
-            logging.error(f"WebDriver error: {str(e)}")
-            return False
-
 def main():
-    pbg = []
-    pfd = []
-    for perfume in urls:
-        if "parfium.bg" in perfume["link"]:
-            pbg.append(perfume)
-        elif "perfumesfromdubai.com" in perfume["link"]:
-            pfd.append(perfume) 
-
-    time.sleep(5)  # Wait for the driver to initialize
-
+    time.sleep(5)
     try:
         driver = create_driver(True)
-        if not check_price_pbg(driver, pbg):
+        if not check_price_pbg(driver, urls):
             logging.info("check_price_pbg failed, recreating WebDriver")
             driver.quit()
             driver = create_driver(True)
         driver.quit()
-
-        driver = create_driver(False)
-        if not check_price_pfd(driver, pfd):
-            logging.info("check_price_pfd failed, recreating WebDriver")
-            driver.quit()
-            driver = create_driver(False)
-        driver.quit()
-
     except KeyboardInterrupt:
         logging.info("Closing WebDriver")
         driver.quit()
@@ -214,6 +137,12 @@ if __name__ == "__main__":
     try:
         logging.info("Starting the script")
         endpoint = "https://perfumes.jobify.one"
+        healthcheck = requests.get(endpoint + '/health-check')
+        while healthcheck.status_code != 200:
+            logging.error("Trying to wake the server up")
+            time.sleep(5)
+            healthcheck = requests.get(endpoint + '/health-check')
+
         logging.info(f"Fetching URLs from {endpoint}")
         urls = fetch_urls(endpoint)
         logging.info(f"Found {len(urls)} URLs")
