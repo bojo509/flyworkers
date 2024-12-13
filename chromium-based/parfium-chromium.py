@@ -8,7 +8,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
-from webdriver_manager.chrome import ChromeDriverManager
 
 # TODO: make the script multi-threaded
 # TODO: fix getting the size elements
@@ -19,8 +18,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # Discord webhook URL
 webhook_url = "https://discord.com/api/webhooks/1284168278335291474/-i1m-VGJk-sFcljJzD7ICGbVrP7sQin3k0A8qo4OZksHEs9_XlMqkIxLHUQSt9oBfK9F"
 
-# Initialize the WebDriver service
-service = ChromeService(ChromeDriverManager().install())
+# Initialize the WebDriver service with system's chromedriver
+service = ChromeService('/usr/bin/chromedriver')
 
 def fetch_urls(endpoint):
     try:
@@ -42,12 +41,13 @@ def create_driver(headless):
     logging.info("Creating new WebDriver instance")
     chrome_options = Options()
     if headless:
-        chrome_options.add_argument("--headless=new")
+        chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.binary_location = "/usr/bin/chromium-browser"
     chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--enable-unsafe-swiftshader")
-
+    chrome_options.add_argument("--disable-software-rasterizer")
+    
     return webdriver.Chrome(service=service, options=chrome_options)
 
 def send_discord_message(content):
@@ -61,7 +61,7 @@ def send_discord_message(content):
 def check_price_pbg(driver, urls):
     for item in urls:
         try:
-            logging.info(f"Navigating to {item["title"]}")
+            logging.info(f'Navigating to {item["title"]}')
             driver.get(item["link"])
             logging.info("Page loaded successfully")
 
