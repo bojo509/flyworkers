@@ -30,7 +30,7 @@ def fetch_urls(endpoint):
         response.raise_for_status()
         perfumes = response.json()
 
-        urls = [{"link": perfume["link"], "title": perfume["title"]} for perfume in perfumes]
+        urls = [{"link": perfume["link"], "title": perfume["title"], "shortid": perfume["shortid"]} for perfume in perfumes]
         return urls
 
     except requests.exceptions.RequestException as e:
@@ -97,6 +97,7 @@ def check_price_pbg(driver, urls):
                 if availability_text:
                     message += f" {availability_text}"
 
+                message += f" - {url}{item['shortid']}"
                 logging.info(f"Price found: {price_to_pay}")
                 send_discord_message(f"Price of {message}")
 
@@ -136,6 +137,11 @@ if __name__ == "__main__":
     try:
         logging.info("Starting the script")
         endpoint = "https://perfumes.jobify.one"
+        shortIdResponse = requests.get("https://perfumes.jobify.one/shortidendpoint")
+        shortIdResponse.raise_for_status()
+        shortIdData = shortIdResponse.json()
+        url = shortIdData["url"]
+
         healthcheck = requests.get(endpoint + '/health-check')
         while healthcheck.status_code != 200:
             logging.error("Trying to wake the server up")
