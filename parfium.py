@@ -1,6 +1,7 @@
 import requests
 import time
 import logging
+import os
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service as ChromeService
@@ -14,9 +15,6 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-# Discord webhook URL
-webhook_url = "https://discord.com/api/webhooks/1284168278335291474/-i1m-VGJk-sFcljJzD7ICGbVrP7sQin3k0A8qo4OZksHEs9_XlMqkIxLHUQSt9oBfK9F"
 
 # Initialize the WebDriver service
 service = ChromeService(ChromeDriverManager().install())
@@ -51,7 +49,7 @@ def create_driver(headless):
 
 def send_discord_message(content):
     data = {"content": content}
-    response = requests.post(webhook_url, json=data)
+    response = requests.post(webhook['url'], json=data)
     if response.status_code == 204:
         logging.info("Webhook message sent successfully!")
     else:
@@ -136,17 +134,16 @@ def main():
 if __name__ == "__main__":
     try:
         logging.info("Starting the script")
-        endpoint = "https://perfumes.jobify.one"
-        shortIdResponse = requests.get("https://perfumes.jobify.one/shortidendpoint")
+        endpoint = os.getenv('ENDPOINT')
+
+        shortIdResponse = requests.get(endpoint + "/shortidendpoint")
         shortIdResponse.raise_for_status()
         shortIdData = shortIdResponse.json()
         url = shortIdData["url"]
 
-        healthcheck = requests.get(endpoint + '/health-check')
-        while healthcheck.status_code != 200:
-            logging.error("Trying to wake the server up")
-            time.sleep(5)
-            healthcheck = requests.get(endpoint + '/health-check')
+        webhook = requests.get(endpoint + "/webhook")
+        webhook.raise_for_status()
+        webhook = webhook.json()
 
         logging.info(f"Fetching URLs from {endpoint}")
         urls = fetch_urls(endpoint)
